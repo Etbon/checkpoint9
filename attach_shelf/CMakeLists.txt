@@ -14,6 +14,7 @@ find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -26,5 +27,33 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+# Add executabel 
+add_executable(pre_approach_node src/pre_approach.cpp)
+
+# Add dependencies
+ament_target_dependencies(pre_approach_node 
+	rclcpp
+	sensor_msgs
+	std_msgs
+	tf2
+	tf2_ros
+	tf2_geometry_msgs
+	nav_msgs
+)
+
+# Install targets
+install(TARGETS 
+	pre_approach_node
+	DESTINATION lib/${PROJECT_NAME}
+
+)
+
+# Install launch
+install(DIRECTORY
+	launch
+	rviz
+	DESTINATION share/${PROJECT_NAME}
+)
 
 ament_package()

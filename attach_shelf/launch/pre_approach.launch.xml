@@ -1,0 +1,17 @@
+<launch>
+  <arg name="obstacle" default="0.3"/>
+  <arg name="degrees" default="-90"/>
+  
+  <node pkg="attach_shelf" exec="pre_approach_node" output="screen">
+    <param name="obstacle" value="$(var obstacle)"/>
+    <param name="degrees" value="$(var degrees)"/>
+    
+    <!-- Remap for the cmd_vel & odom -->
+    <remap from="/robot/cmd_vel" to="/diffbot_base_controller/cmd_vel_unstamped"/>
+    <remap from="/odom" to="/diffbot_base_controller/odom"/>
+  </node>
+
+  <!-- Start Rviz -->
+  <node pkg="rviz2" exec="rviz2" output="screen" args="-d $(find-pkg-share attach_shelf)/rviz/config.rviz"/>
+
+</launch> 
