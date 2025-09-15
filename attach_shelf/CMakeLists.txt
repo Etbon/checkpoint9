@@ -15,6 +15,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -28,23 +29,60 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+# Custom inteface 
+rosidl_generate_interfaces(attach_shelf
+	"srv/GoToLoading.srv"
+)
+
+ament_export_dependencies(rosidl_default_runtime
+)
+
 # Add executabel 
 add_executable(pre_approach_node src/pre_approach.cpp)
+add_executable(pre_approach_v2_node src/pre_approach_v2.cpp)
+add_executable(approach_service_server_node src/approach_service_server.cpp)
+
+rosidl_target_interfaces(pre_approach_v2_node
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
+
+rosidl_target_interfaces(approach_service_server_node
+	${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
 
 # Add dependencies
 ament_target_dependencies(pre_approach_node 
-	rclcpp
-	sensor_msgs
+	rclcpp 
+	sensor_msgs 
+	std_msgs 
+	tf2 
+	tf2_ros 
+	tf2_geometry_msgs 
+	nav_msgs
+)
+ament_target_dependencies(pre_approach_v2_node 
+	rclcpp 
+	sensor_msgs 
+	std_msgs 
+	tf2 
+	tf2_ros 
+	tf2_geometry_msgs 
+	nav_msgs
+)
+ament_target_dependencies(approach_service_server_node
+	rclcpp 
+	sensor_msgs 
 	std_msgs
 	tf2
 	tf2_ros
 	tf2_geometry_msgs
-	nav_msgs
 )
 
 # Install targets
 install(TARGETS 
 	pre_approach_node
+	pre_approach_v2_node
+	approach_service_server_node
 	DESTINATION lib/${PROJECT_NAME}
 
 )
