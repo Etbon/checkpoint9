@@ -444,23 +444,7 @@ class ApproachServer : public rclcpp::Node {
 
         const std::string child = "cart_frame";
 
-        //double yaw = std::atan2(oy,ox);
-
-        double yaw = 0.0;  // fallback
-        try {
-            auto base = tf_buffer_->lookupTransform("odom", "robot_base_footprint", tf2::TimePointZero);
-            const double bx = base.transform.translation.x;
-            const double by = base.transform.translation.y;
-
-            const double dx = ox - bx;
-            const double dy = oy - by;
-            yaw = std::atan2(dy, dx);   // angle of vector robot -> shelf
-        } 
-        catch (const tf2::TransformException &ex) {
-            RCLCPP_WARN(this->get_logger(), "odom->robot_base_footprint lookup failed: %s", ex.what());
-            // keep yaw = 0.0; still works
-        }
-
+        double yaw = std::atan2(oy,ox);
 
         // Set static TF
         publish_cart_frame_static_once(ox, oy, "odom", child, yaw);
