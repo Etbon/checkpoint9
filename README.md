@@ -2,9 +2,18 @@
 
 
 
+
+
+
 Task 1:
-https://github.com/user-attachments/assets/ef955b83-6d9f-4fb4-a6e1-c34278598962
+
+https://github.com/user-attachments/assets/b1f01f8a-7aa0-43c9-8bac-e545dff88971
+
+
 
 
 Task 2:
-https://github.com/user-attachments/assets/b71519eb-e8a0-40d3-996f-53e6a84f6d24
+
+
+https://github.com/user-attachments/assets/d14b3d98-de49-4879-9b6c-6202a8d6e844
+
