@@ -15,6 +15,7 @@
 
 #include "attach_shelf/srv/go_to_loading.hpp"
 #include "rclcpp/client.hpp"
+#include "rclcpp/future_return_code.hpp"
 #include "rclcpp/logging.hpp"
 
 
@@ -89,29 +90,47 @@ class PreApproach : public rclcpp::Node {
     double obstacle_threshold_;
     int target_degrees_;
 
-    // cient bool 
+    // Cient bool 
     bool attach_to_shelf_{false};
+
+    // Call once flag
+    bool finished_{false};  
 
     //--------
     // Client   
     //--------
     void call_service_when_done(bool attach) {
-        // Wiat for sever
+        // Wait for server
         while (!client_->wait_for_service(std::chrono::seconds(1))) {
             if (!rclcpp::ok()) {
-                RCLCPP_ERROR(this->get_logger(), "Interupted while waiting for service.");
+                RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for service.");
                 return;
             }
-            RCLCPP_INFO(this->get_logger(), "Waiting for /approch_shelf...");
+            RCLCPP_INFO(this->get_logger(), "Waiting for /approach_shelf...");
         }        
+
         // Create request 
         auto request = std::make_shared<GoToLoading::Request>();
         request->attach_to_shelf = attach;
 
-        // Async send
-        auto future = client_->async_send_request(request);
+        // Async send lambda
+        client_->async_send_request(request, [this](rclcpp::Client<GoToLoading>::SharedFuture future) {
+                try {
+                    auto response = future.get();
+                    RCLCPP_INFO(this->get_logger(), "Service reply complete=%s", response->complete ? "true" : "false");
 
-        RCLCPP_INFO(this->get_logger(), "Request send: attach_to_shelf=%s", attach ? "true" : "false");
+                } catch (const std::exception &e) {
+                    RCLCPP_ERROR(this->get_logger(), "Service future error: %s", e.what());
+                }
+                
+                // Shutting down
+                rclcpp::shutdown();
+            }
+        );         
+        
+        RCLCPP_INFO(this->get_logger(), "Request sent (attach_to_shelf=%s). Waiting for server reply...", 
+            attach ? "true" : "false"
+        );
     }
     
     //-----------------
@@ -241,21 +260,27 @@ class PreApproach : public rclcpp::Node {
                 break;
             }
             case State::FINISH: {
-                RCLCPP_INFO(this->get_logger(), "State is FINISH");
+                if (!finished_) {
+                    finished_ = true;
 
-                // Stop 
-                geometry_msgs::msg::Twist twist_msg;
-                twist_msg.linear.x = 0.0;
-                twist_msg.angular.z = 0.0;
-                publisher_->publish(twist_msg);
+                    RCLCPP_DEBUG(this->get_logger(), "State is FINISH");
 
-                // Call clent 
-                call_service_when_done(attach_to_shelf_);
+                    // Stop 
+                    geometry_msgs::msg::Twist twist_msg;
+                    twist_msg.linear.x = 0.0;
+                    twist_msg.angular.z = 0.0;
+                    publisher_->publish(twist_msg);
 
-                // Stop the timer
-                timer_->cancel();
+                    // Stop the timer
+                    timer_->cancel();
 
-                break;
+                    RCLCPP_INFO(this->get_logger(), "Pre-approach DONE. Calling the server...");
+                    
+                    // Calling the server 
+                    call_service_when_done(attach_to_shelf_);
+                }
+
+                return;
             }
         }
     }

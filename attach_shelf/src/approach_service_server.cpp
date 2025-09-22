@@ -75,6 +75,8 @@ class ApproachServer : public rclcpp::Node {
     rclcpp::Service<GoToLoading>::SharedPtr server_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
     rclcpp::TimerBase::SharedPtr tf_timer_;
+    rclcpp::TimerBase::SharedPtr shutdown_timer_;
+
 
     sensor_msgs::msg::LaserScan::SharedPtr laser_scan_; // Latest scan 
     std::unique_ptr<tf2_ros::StaticTransformBroadcaster> static_tf_broadcaster_;
@@ -285,20 +287,19 @@ class ApproachServer : public rclcpp::Node {
     // Drive to TF frame
     //-------------------
     bool drive_to_cart_frame(const std::string &child_frame,
-                             double xy_tol = 0.05,
-                             double mx_time_sec = 12.0) {
+                             double xy_tol = 0.10,
+                             double max_time_sec = 20.0) {
 
         rclcpp::Rate rate(20.0);
         const rclcpp::Time t0 = this->now();
 
-        while (rclcpp::ok() && (this->now() - t0).seconds() < mx_time_sec ) {
+        while (rclcpp::ok() && (this->now() - t0).seconds() < max_time_sec ) {
             geometry_msgs::msg::TransformStamped T;
 
             try {
-                T = tf_buffer_->lookupTransform("robot_base_footprint", child_frame, tf2::TimePointZero);
-            }
-            catch (const tf2::TransformException &ex) {
-                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(),1000, "TF lookup faild (base: robot_base_footprint, child: %s): %s",
+                T = tf_buffer_->lookupTransform("robot_base_link", child_frame, tf2::TimePointZero);
+            } catch (const tf2::TransformException &ex) {
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(),1000, "TF lookup faild (base: robot_base_link, child: %s): %s",
                 child_frame.c_str(), ex.what());
             
                 rate.sleep();
@@ -306,30 +307,36 @@ class ApproachServer : public rclcpp::Node {
             }
             
             // How far to the TF_error
-            const double ex = T.transform.translation.x;
-            const double ey = T.transform.translation.y;
+            const double dx = T.transform.translation.x;
+            const double dy = T.transform.translation.y;
     
             // Distance
-            const double distance = std::hypot(ex, ey);
-
-            const double yaw_err = std::atan2(ey, ex);
+            const double distance = std::hypot(dx, dy);
             
             // Move to TF
             // stop if reache distance
-            if (distance < xy_tol) {
-                geometry_msgs::msg::Twist z;
-                vel_pub_->publish(z);
+            if (distance < xy_tol || (dx < 0.33 && std::abs(dy) < 0.10)) {
+                vel_pub_->publish(geometry_msgs::msg::Twist{});
                 return true;
             }
 
-            // porportional contol 
+            const double yaw_err = std::atan2(dy, std::max(1e-3, dx));
+
+            // Speed - slow down as you get closer
+            double v_prop = 0.6 * dx;
+            double v_cap_near = std::clamp(distance, 0.08, 0.25);
+            double v_cmd = std::clamp(v_prop, -v_cap_near, v_cap_near);   
+
+            // Angular command 
+            double w_cmd = (std::abs(yaw_err) < 0.05) ? 0.0 : std::clamp(1.5 * yaw_err, -1.0, 1.0); 
+
+            // Porportional control 
             geometry_msgs::msg::Twist cmd;
-            cmd.linear.x = std::clamp(0.6 * ex, -0.25, 0.25);
-            cmd.angular.z = std::clamp(1.5 * yaw_err, -0.25, 0.25);
+            cmd.linear.x = v_cmd;
+            cmd.angular.z = w_cmd;
             vel_pub_->publish(cmd);
 
-            rate.sleep();
-            
+            rate.sleep();   
         }
        
         // Timeout: stop + fail        
@@ -368,6 +375,20 @@ class ApproachServer : public rclcpp::Node {
         RCLCPP_INFO(this->get_logger(), "Lifting shelf up.");
         msg.data = "up";
         elevator_up_pub_->publish(msg);
+    }
+
+    //----------
+    // Shutdown 
+    //----------
+    void graceful_shutdown_after(std::chrono::milliseconds delay) {
+        shutdown_timer_ = this->create_wall_timer(
+            delay,
+            [this](){
+                shutdown_timer_->cancel();
+                RCLCPP_INFO(this->get_logger(), "Shutting down approach server.");
+                rclcpp::shutdown();
+            }
+        );
     }
 
     //----------
@@ -462,14 +483,20 @@ class ApproachServer : public rclcpp::Node {
             return;
         };
 
-        // move 30cm more 
+        // 8. Move 30cm more 
         creep_forward(0.30);
+
+        // let physics simulation settle
+        rclcpp::sleep_for(std::chrono::milliseconds(250));
         
-        // lift shelf 
+        // 9. Lift shelf 
         lift_shelf();
 
         RCLCPP_INFO(this->get_logger(), "Final approach done. Shelf lifted.");
         response->complete = true;
+        
+        // 10. Shutdown
+        graceful_shutdown_after(std::chrono::milliseconds(250));
     }
 };
 
@@ -477,6 +504,5 @@ int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<ApproachServer>();
     rclcpp::spin(node);
-    rclcpp::shutdown();
     return 0;
 }

@@ -1,3 +1,4 @@
+#include "rclcpp/logging.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits> 
@@ -75,6 +76,9 @@ class PreApproach : public rclcpp::Node {
     // Rotation
     double obstacle_threshold_;
     int target_degrees_;
+
+    // Finish
+    bool finished_{false};
     
     //-----------------
     // Laser Callback 
@@ -152,7 +156,7 @@ class PreApproach : public rclcpp::Node {
     void timer_callback() {
         switch (state_) {
             case State::MOVING: {
-                RCLCPP_INFO(this->get_logger(),"State is MOVING");
+                RCLCPP_DEBUG(this->get_logger(),"State is MOVING");
                
                 // 1. Check if laser disnace is > than obstecel threshold
                 if (front_laser_ > obstacle_threshold_+ 0.02) {   
@@ -183,7 +187,7 @@ class PreApproach : public rclcpp::Node {
                 break;
             }
             case State::ROTATING: {
-                RCLCPP_INFO(this->get_logger(), "State is ROTATING");
+                RCLCPP_DEBUG(this->get_logger(), "State is ROTATING");
 
                 double distance_remaining  = shortestAngDist(current_yaw_, goal_yaw);
                 const double tolerance = 0.02;
@@ -203,18 +207,26 @@ class PreApproach : public rclcpp::Node {
                 break;
             }
             case State::FINISH: {
-                RCLCPP_INFO(this->get_logger(), "State is FINISH");
+                if (!finished_) {
+                    finished_ = true;
 
-                // Stop 
-                geometry_msgs::msg::Twist twist_msg;
-                twist_msg.linear.x = 0.0;
-                twist_msg.angular.z = 0.0;
-                publisher_->publish(twist_msg);
+                    RCLCPP_DEBUG(this->get_logger(), "State is FINISH");
 
-                // Stop the timer
-                timer_->cancel();
+                    // Stop 
+                    geometry_msgs::msg::Twist twist_msg;
+                    twist_msg.linear.x = 0.0;
+                    twist_msg.angular.z = 0.0;
+                    publisher_->publish(twist_msg);
 
-                break;
+                    // Stop the timer
+                    timer_->cancel();
+
+                    RCLCPP_INFO(this->get_logger(), "Pre-approach DONE. Shutting down.");
+
+                    rclcpp::shutdown();
+                }
+
+                return;
             }
         }
     }
@@ -225,6 +237,5 @@ int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<PreApproach>();
     rclcpp::spin(node);
-    rclcpp::shutdown();
     return 0;
 }
