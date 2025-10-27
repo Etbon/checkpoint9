@@ -17,7 +17,11 @@ PreApproach::PreApproach(const rclcpp::NodeOptions &options)
 
     const auto cmd_topic = this->declare_parameter<std::string>("/robot/cmd_vel", "/diffbot_base_controller/cmd_vel_unstamped");
     const auto odom_topic = this->declare_parameter<std::string>("/odom","/diffbot_base_controller/odom");
-    (void)this->declare_parameter<bool>("use_sim_time", true);
+
+    // Only creat sim time if not createt yet (my_components gaurd)
+    if (!this->has_parameter("use_sim_time")) {
+        (void)this->declare_parameter<bool>("use_sim_time", true);
+    }
 
     // Initialize publisher
     publisher_ = this->create_publisher<geometry_msgs::msg::Twist>(
@@ -185,9 +189,8 @@ void PreApproach::timer_callback() {
                 timer_->cancel();
 
                 RCLCPP_INFO(this->get_logger(), "Pre-approach DONE.");
-                rclcpp::shutdown();
             }
-
+            
             return;
         }
     }
